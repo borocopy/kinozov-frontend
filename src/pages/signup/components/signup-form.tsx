@@ -17,6 +17,9 @@ import {
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { API_ENDPOINT } from "@/constants";
+import { redirect } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 const formSchema = z
   .object({
@@ -44,8 +47,7 @@ const formSchema = z
       .max(64, {
         message: "Пароль должен состоять максимум из 64 символов.",
       }),
-    confirmPassword: z
-      .string()
+    confirmPassword: z.string(),
   })
   .refine(({ password, confirmPassword }) => password === confirmPassword, {
     message: "Пароли не совпадают.",
@@ -63,8 +65,48 @@ export default function SignUpForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    form.clearErrors("root");
+    try {
+      const res = await fetch(`${API_ENDPOINT}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: values.username,
+          email: values.email,
+          password: values.password,
+          tos_accepted: true,
+        }),
+      });
+      const data = await res.json();
+      console.log(data);
+
+      switch (res.status) {
+        case 201:
+          return redirect("/signin");
+        case 400:
+          form.setError("root", {
+            type: "400",
+            message: "Имя пользователя или адрес электронной почты уже заняты",
+          });
+          break;
+        default:
+          form.setError("root", {
+            type: "500",
+            message:
+              "На стороне сервера произошла ошибка. Повторите запрос позже.",
+          });
+      }
+    } catch (e) {
+      form.setError("root", {
+        type: "custom",
+        message: "Не удалось выполнить запрос на сервер.",
+      });
+    }
+
+    return null;
   }
 
   return (
@@ -72,6 +114,11 @@ export default function SignUpForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-2">
+            {form.formState.errors.root && (
+              <p className={cn("text-sm font-medium text-destructive")}>
+                {form.formState.errors.root.message}
+              </p>
+            )}
             <FormField
               control={form.control}
               name="username"
